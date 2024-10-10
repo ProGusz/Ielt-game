@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IELTS Vocabulary RPG</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .game-container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+        }
+        input, button, select {
+            margin: 10px 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .progress-bar {
+            width: 100%;
+            background-color: #e0e0e0;
+            padding: 3px;
+            border-radius: 3px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, .2);
+            margin-bottom: 10px;
+        }
+        .progress-bar-fill {
+            display: block;
+            height: 22px;
+            background-color: #659cef;
+            border-radius: 3px;
+            transition: width 500ms ease-in-out;
+        }
+        .word-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .word-option {
+            padding: 10px;
+            background-color: #f0f0f0;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .word-option:hover {
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>IELTS Vocabulary RPG</h1>
+        <div id="auth-screen">
+            <h2>Login or Sign Up</h2>
+            <input type="text" id="username" placeholder="Username">
+            <input type="password" id="password" placeholder="Password">
+            <button onclick="login()">Login</button>
+            <button onclick="signup()">Sign Up</button>
+        </div>
+        <div id="start-screen" style="display: none;">
+            <h2>Choose Difficulty:</h2>
+            <select id="difficulty-select">
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+            </select>
+            <button onclick="startGame()">Start Game</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+        <div id="game-screen" style="display: none;">
+            <h2>Player</h2>
+            <p>Level: <span id="player-level"></span> | EXP: <span id="player-exp"></span></p>
+            <div class="progress-bar">
+                <span id="player-health-bar" class="progress-bar-fill" style="width: 100%;"></span>
+            </div>
+            <h2>Enemy: <span id="enemy-name"></span></h2>
+            <div class="progress-bar">
+                <span id="enemy-health-bar" class="progress-bar-fill" style="width: 100%;"></span>
+            </div>
+            <h3>Definition:</h3>
+            <p id="definition"></p>
+            <div id="word-options" class="word-options"></div>
+            <p id="result"></p>
+        </div>
+    </div>
+
+    <script>
+        let currentWord = '';
+        let player = {};
+        let enemy = {};
+
+        function signup() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            fetch('/signup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({username: username, password: password}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Signup successful! Please login.');
+                } else {
+                    alert(data.message);
+                }
+            });
+        }
+
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({username: username, password: password}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('auth-screen').style.display = 'none';
+                    document.getElementById('start-screen').style.display = 'block';
+                } else {
+                    alert(data.message);
+                }
+            });
+        }
+
+        function logout() {
+            fetch('/logout', {
+                method: 'POST',
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('auth-screen').style.display = 'block';
+                    document.getElementById('start-screen').style.display = 'none';
+                    document.getElementById('game-screen').style.display = 'none';
+                }
+            });
+        }
+
+        function startGame() {
+            const difficulty = document.getElementById('difficulty-select').value;
+            fetch('/start_game', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({difficulty: difficulty}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success === false) {
+                    alert(data.message);
+                    return;
+                }
+                player = data;
+                document.getElementById('start-screen').style.display = 'none';
+                document.getElementById('game-screen').style.display = 'block';
+                updatePlayerStats();
+                getNewWord();
+            });
+        }
+
+        function getNewWord() {
+            fetch('/get_word')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success === false) {
+                        alert(data.message);
+                        return;
+                    }
+                    currentWord = data.word;
+                    document.getElementById('definition').textContent = data.definition;
+                    displayWordOptions(data.options);
+                    document.getElementById('result').textContent = '';
+                });
+        }
+
+        function displayWordOptions(options) {
+            const wordOptionsContainer = document.getElementById('word-options');
+            wordOptionsContainer.innerHTML = '';
+            options.forEach(word => {
+                const button = document.createElement('button');
+                button.textContent = word;
+                button.className = 'word-option';
+                button.onclick = () => checkAnswer(word);
+                wordOptionsContainer.appendChild(button);
+            });
+        }
+
+        function checkAnswer(selectedWord) {
+            fetch('/check_answer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({word: selectedWord, correct_word: currentWord}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success === false) {
+                    alert(data.message);
+                    return;
+                }
+                if (data.is_correct) {
+                    document.getElementById('result').textContent = 'Correct! You dealt damage to the enemy!';
+                } else {
+                    document.getElementById('result').textContent = `Incorrect. The correct word was "${currentWord}". You took damage!`;
+                }
+                player = data.player;
+                enemy = data.enemy;
+                updatePlayerStats();
+                updateEnemyStats();
+                if (data.enemy_defeated) {
+                    alert('Enemy defeated! A new enemy appears!');
+                }
+                if (data.game_over) {
+                    alert('Game Over! Your health reached 0.');
+                    document.getElementById('start-screen').style.display = 'block';
+                    document.getElementById('game-screen').style.display = 'none';
+                } else {
+                    setTimeout(getNewWord, 1500);
+                }
+            });
+        }
+
+        function updatePlayerStats() {
+            document.getElementById('player-level').textContent = player.level;
+            document.getElementById('player-exp').textContent = player.exp;
+            const healthPercentage = (player.health / player.max_health) * 100;
+            document.getElementById('player-health-bar').style.width = `${healthPercentage}%`;
+        }
+
+        function updateEnemyStats() {
+            document.getElementById('enemy-name').textContent = enemy.name;
+            const healthPercentage = (enemy.health / enemy.max_health) * 100;
+            document.getElementById('enemy-health-bar').style.width = `${healthPercentage}%`;
+        }
+    </script>
+</body>
+</html>
